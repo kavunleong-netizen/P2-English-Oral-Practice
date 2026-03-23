@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>英語口語挑戰</title>
+    
+    <style>
+        :root {
+            --primary-color: #4CAF50;
+            --secondary-color: #2196F3;
+            --bg-color: #F0F9FF;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            overflow: hidden;
+            -webkit-user-select: none;
+        }
+
+        /* 讀取中畫面 */
+        #loading-screen {
+            font-size: 32px;
+            color: #666;
+            font-weight: bold;
+        }
+
+        /* 學生練習區 */
+        #practice-zone {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            text-align: center;
+        }
+
+        .sentence-card {
+            font-size: 60px; /* 針對 iPad 螢幕放大字體 */
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 50px;
+            padding: 0 20px;
+            min-height: 150px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .btn-container {
+            display: flex;
+            gap: 40px;
+        }
+
+        .circle-btn {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            border: none;
+            font-size: 50px;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            transition: 0.2s;
+        }
+        
+        .circle-btn:active { transform: scale(0.9); }
+
+        #listen-btn { background-color: var(--secondary-color); }
+        #record-btn { background-color: #F44336; }
+        #next-btn { 
+            background-color: var(--primary-color); 
+            font-size: 32px; 
+            border-radius: 20px; 
+            width: 200px; 
+            height: 80px; 
+            margin-top: 60px;
+            border: none;
+            color: white;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+        }
+
+        #feedback {
+            font-size: 100px;
+            margin-bottom: 20px;
+            height: 120px;
+        }
+
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <div id="loading-screen">🔄 正在下載今天的挑戰...</div>
+
+    <div id="practice-zone" class="hidden">
+        <div id="feedback"></div>
+        <div class="sentence-card" id="display-text">準備好了嗎？</div>
+        
+        <div class="btn-container" id="action-btns">
+            <button class="circle-btn" id="listen-btn" onclick="playTTS()">🔊</button>
+            <button class="circle-btn" id="record-btn" onclick="startSTT()">🎤</button>
+        </div>
+
+        <button id="next-btn" class="hidden" onclick="nextQuestion()">下一題</button>
+    </div>
+
+    <script>
+        // ★★★ 老師請注意：將下面這串換成你的 Google 試算表 CSV 網址 ★★★
+        // 目前先放幾個預設單字確保你測試時能跑
+        const GOOGLE_SHEET_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJ13yt6GiMw7ehCCTl2Af9hu2vlRNXbI3MF1KG9jBhUL2YMYRNdlmdL_cJWkTi8YVMeq8X4VaBXJL8/pub?output=csv"; 
+        
+        let sentences = ["reading", "playing", "What do you like doing?"];
+        let currentIndex = 0;
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const synth = window.speechSynthesis;
+        let recognition;
+
+        // 初始化頁面
+        window.onload = () => {
+            if(GOOGLE_SHEET_CSV_URL === "預設測試模式") {
+                startApp();
+            } else {
+                fetchContentFromGoogle();
+            }
+        };
+
+        // 從 Google 試算表抓取題目
+        function fetchContentFromGoogle() {
+            fetch(GOOGLE_SHEET_CSV_URL)
+                .then(response => response.text())
+                .then(data => {
+                    // 將 CSV 轉換為陣列，過濾掉空白行
+                    sentences = data.split('\n').map(row => row.trim()).filter(row => row !== '');
+                    startApp();
+                })
+                .catch(error => {
+                    document.getElementById('loading-screen').innerText = "❌ 網路連線錯誤，請通知老師。";
+                });
+        }
+
+        function startApp() {
+            document.getElementById('loading-screen').classList.add('hidden');
+            document.getElementById('practice-zone').classList.remove('hidden');
+            
+            if (SpeechRecognition) {
+                recognition = new SpeechRecognition();
+                recognition.lang = 'en-US';
+                recognition.interimResults = false;
+
+                recognition.onresult = (event) => {
+                    const result = event.results[0][0].transcript.toLowerCase().replace(/[.,?!]/g, "");
+                    const target = sentences[currentIndex].toLowerCase().replace(/[.,?!]/g, "");
+                    checkResult(result, target);
+                };
+                recognition.onerror = () => {
+                    document.getElementById('record-btn').style.opacity = "1";
+                };
+            } else {
+                alert("這台 iPad 需要更新或使用 Safari 瀏覽器。");
+            }
+            showQuestion();
+        }
+
+        function showQuestion() {
+            document.getElementById('display-text').innerText = sentences[currentIndex];
+            document.getElementById('feedback').innerText = "";
+            document.getElementById('next-btn').classList.add('hidden');
+            document.getElementById('action-btns').classList.remove('hidden');
+            document.getElementById('record-btn').style.opacity = "1";
+        }
+
+        function playTTS() {
+            const utter = new SpeechSynthesisUtterance(sentences[currentIndex]);
+            utter.lang = 'en-US';
+            utter.rate = 0.8;
+            synth.speak(utter);
+        }
+
+        function startSTT() {
+            document.getElementById('record-btn').style.opacity = "0.3";
+            recognition.start();
+        }
+
+        function checkResult(result, target) {
+            document.getElementById('record-btn').style.opacity = "1";
+            const feedback = document.getElementById('feedback');
+            
+            if (result.includes(target) || target.includes(result)) {
+                feedback.innerText = "🌟";
+                document.getElementById('next-btn').classList.remove('hidden');
+                document.getElementById('action-btns').classList.add('hidden'); // 答對就隱藏麥克風
+                synth.speak(new SpeechSynthesisUtterance("Good!"));
+            } else {
+                feedback.innerText = "🤔";
+                synth.speak(new SpeechSynthesisUtterance("Try again."));
+            }
+        }
+
+        function nextQuestion() {
+            currentIndex++;
+            if (currentIndex < sentences.length) {
+                showQuestion();
+            } else {
+                document.getElementById('display-text').innerText = "🎉 完成！";
+                document.getElementById('feedback').innerText = "🏆";
+                document.getElementById('next-btn').classList.add('hidden');
+                document.getElementById('action-btns').classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
