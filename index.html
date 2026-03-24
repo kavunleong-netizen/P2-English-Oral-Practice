@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>P2 English Star Challenge</title>
+    <title>P2 English Reading Challenge</title>
     <style>
         :root {
             --primary: #4CAF50;
@@ -36,7 +36,6 @@
             color: var(--secondary);
         }
 
-        /* 題目清單區 */
         #menu-zone {
             width: 90%;
             max-width: 600px;
@@ -53,78 +52,94 @@
             justify-content: space-between;
             align-items: center;
             box-shadow: 0 4px 10px rgba(0,0,0,0.08);
-            font-size: 26px;
+            font-size: 22px;
             cursor: pointer;
-            transition: 0.2s;
         }
-        .item-card:active { transform: scale(0.98); background: #f9f9f9; }
 
-        .star-display { color: var(--star-color); font-size: 22px; font-weight: bold; }
+        .star-display { color: var(--star-color); font-size: 20px; font-weight: bold; }
 
-        /* 練習區 */
+        /* 練習區優化 */
         #practice-zone {
             display: none;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            flex: 1;
             width: 100%;
+            padding: 20px 0;
+            box-sizing: border-box;
+        }
+
+        .sentence-container {
+            width: 90%;
+            max-height: 30vh; /* 防止太長遮住按鈕 */
+            overflow-y: auto;
+            margin: 20px 0;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
         }
 
         .sentence-display {
-            font-size: 55px;
+            font-size: 32px; /* 讀段落時字體縮小一點點以容納更多字 */
             font-weight: bold;
-            margin: 40px 20px;
-            text-align: center;
+            text-align: left;
             color: #333;
-            line-height: 1.2;
+            line-height: 1.5;
+        }
+
+        .timer-hint {
+            font-size: 18px;
+            color: #F44336;
+            margin-bottom: 10px;
+            font-weight: bold;
+            height: 25px;
         }
 
         .star-feedback {
             font-size: 80px;
             height: 100px;
             color: var(--star-color);
-            text-shadow: 2px 2px 5px rgba(0,0,0,0.1);
         }
 
-        .btn-group { display: flex; gap: 40px; margin-top: 20px; }
+        .btn-group { display: flex; gap: 40px; margin-top: 10px; }
 
         .circle-btn {
-            width: 140px; height: 140px; border-radius: 50%; border: none;
-            font-size: 50px; color: white; cursor: pointer;
+            width: 120px; height: 120px; border-radius: 50%; border: none;
+            font-size: 45px; color: white; cursor: pointer;
             box-shadow: 0 8px 15px rgba(0,0,0,0.2);
             display: flex; align-items: center; justify-content: center;
-            transition: 0.3s;
         }
 
         #btn-listen { background-color: var(--secondary); }
         #btn-record { background-color: #F44336; }
         
         .nav-btn {
-            margin-top: 50px; padding: 18px 50px; font-size: 24px;
+            margin-top: 30px; padding: 15px 40px; font-size: 22px;
             border-radius: 35px; border: none; background: var(--primary);
             color: white; cursor: pointer; font-weight: bold;
         }
 
         .hidden { display: none !important; }
-        #loading { font-size: 24px; margin-top: 100px; color: #666; }
     </style>
 </head>
 <body>
 
-    <div class="header">🌟 P2 English Challenge</div>
+    <div class="header">🌟 P2 Reading Challenge</div>
 
-    <div id="loading">🔄 Loading your lessons...</div>
+    <div id="loading" style="margin-top:50px;">🔄 Loading...</div>
 
     <div id="menu-zone" class="hidden">
-        <p style="text-align:center; color:#666; font-size: 20px;">Tap a word to start:</p>
         <div id="item-list"></div>
-        <button class="nav-btn" onclick="showReport()" style="width:100%; background:#9C27B0; margin-top:30px;">View My Total Stars 🏆</button>
+        <button class="nav-btn" onclick="showReport()" style="width:100%; background:#9C27B0; margin-top:30px;">Total Stars 🏆</button>
     </div>
 
     <div id="practice-zone">
         <div class="star-feedback" id="star-result"></div>
-        <div class="sentence-display" id="current-text"></div>
+        <div class="timer-hint" id="timer-hint"></div>
+        
+        <div class="sentence-container">
+            <div class="sentence-display" id="current-text"></div>
+        </div>
         
         <div class="btn-group">
             <button class="circle-btn" id="btn-listen" onclick="playAudio()">🔊</button>
@@ -135,34 +150,29 @@
     </div>
 
     <script>
-        // ★★★ 老師請注意：請將下面這串網址換成你的 Google CSV 網址 ★★★
+        // ★★★ 請將下面換成您的 Google CSV 網址 ★★★
         const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJ13yt6GiMw7ehCCTl2Af9hu2vlRNXbI3MF1KG9jBhUL2YMYRNdlmdL_cJWkTi8YVMeq8X4VaBXJL8/pub?output=csv"; 
         
         let dataStore = []; 
         let currentIndex = -1;
         let recordingTimer;
+        let countdownValue = 30; // 設定為 30 秒
+        let countdownInterval;
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const synth = window.speechSynthesis;
         let recognition;
 
-        window.onload = () => {
-            fetchData();
-        };
+        window.onload = fetchData;
 
         function fetchData() {
             if (CSV_URL === "您的CSV網址" || CSV_URL === "") {
-                setupData(["Reading", "Swimming", "I like skipping", "What do you like?"]);
+                setupData(["Hi, I am a student.", "I like reading books every day in the library.", "The quick brown fox jumps over the lazy dog."]);
             } else {
-                fetch(CSV_URL)
-                    .then(res => res.text())
-                    .then(text => {
-                        const lines = text.split('\n').map(l => l.trim()).filter(l => l !== "");
-                        setupData(lines);
-                    })
-                    .catch(() => {
-                        document.getElementById('loading').innerText = "❌ Connection Error. Please check settings.";
-                    });
+                fetch(CSV_URL).then(res => res.text()).then(text => {
+                    const lines = text.split('\n').map(l => l.trim()).filter(l => l !== "");
+                    setupData(lines);
+                }).catch(() => { document.getElementById('loading').innerText = "❌ Error"; });
             }
         }
 
@@ -179,9 +189,8 @@
                 const card = document.createElement('div');
                 card.className = 'item-card';
                 card.onclick = () => startPractice(index);
-                
                 let starText = item.stars > 0 ? "⭐".repeat(item.stars) : "New 📝";
-                card.innerHTML = `<span>${item.text}</span><span class="star-display">${starText}</span>`;
+                card.innerHTML = `<span style="flex:1; text-align:left; margin-right:10px;">${item.text.substring(0,25)}...</span><span class="star-display">${starText}</span>`;
                 listDiv.appendChild(card);
             });
             document.getElementById('menu-zone').classList.remove('hidden');
@@ -194,53 +203,72 @@
             document.getElementById('practice-zone').style.display = 'flex';
             document.getElementById('current-text').innerText = dataStore[index].text;
             document.getElementById('star-result').innerText = "";
+            document.getElementById('timer-hint').innerText = "";
             
             if (SpeechRecognition && !recognition) {
                 recognition = new SpeechRecognition();
                 recognition.lang = 'en-US';
-                recognition.continuous = false;
+                recognition.continuous = true; // 開啟連續模式以支援長段落
                 recognition.interimResults = false;
 
                 recognition.onresult = (e) => {
-                    clearTimeout(recordingTimer);
-                    handleResult(e.results[0][0].transcript);
+                    stopTimers();
+                    handleResult(e.results[e.results.length - 1][0].transcript);
                 };
-
-                recognition.onend = () => {
-                    resetRecordButton();
-                };
+                recognition.onend = resetRecordButton;
             }
         }
 
         function playAudio() {
+            synth.cancel();
             const utter = new SpeechSynthesisUtterance(dataStore[currentIndex].text);
             utter.lang = 'en-US';
-            utter.rate = 0.75; // 稍微放慢一點點
+            utter.rate = 0.75;
             synth.speak(utter);
         }
 
         function startRecording() {
             const btn = document.getElementById('btn-record');
             btn.style.backgroundColor = "var(--record-active)";
-            btn.style.fontSize = "24px";
             btn.innerText = "Listening";
-
+            
             try {
                 recognition.start();
-                // 設定 10 秒保護計時器，讓長句子能讀完
-                clearTimeout(recordingTimer);
-                recordingTimer = setTimeout(() => {
-                    recognition.stop();
-                }, 10000); 
+                startTimers();
             } catch (e) {
                 recognition.stop();
             }
         }
 
+        function startTimers() {
+            countdownValue = 30; // 30秒倒計時
+            document.getElementById('timer-hint').innerText = `Time left: ${countdownValue}s`;
+            
+            clearInterval(countdownInterval);
+            countdownInterval = setInterval(() => {
+                countdownValue--;
+                document.getElementById('timer-hint').innerText = `Time left: ${countdownValue}s`;
+                if (countdownValue <= 0) {
+                    recognition.stop();
+                    stopTimers();
+                }
+            }, 1000);
+
+            clearTimeout(recordingTimer);
+            recordingTimer = setTimeout(() => {
+                recognition.stop();
+            }, 30000); 
+        }
+
+        function stopTimers() {
+            clearInterval(countdownInterval);
+            clearTimeout(recordingTimer);
+            document.getElementById('timer-hint').innerText = "";
+        }
+
         function resetRecordButton() {
             const btn = document.getElementById('btn-record');
             btn.style.backgroundColor = "#F44336";
-            btn.style.fontSize = "50px";
             btn.innerText = "🎤";
         }
 
@@ -249,30 +277,24 @@
             const heard = speech.toLowerCase().replace(/[.,?!]/g, "");
             
             let stars = 0;
-            // 評分邏輯優化
+            // 針對長段落的寬鬆評分邏輯
             if (heard === target) {
                 stars = 3;
-            } else if (heard.includes(target) || target.includes(heard)) {
-                stars = 2;
+            } else if (heard.length > target.length * 0.5) {
+                stars = 2; // 讀超過一半就算 Good
             } else if (heard.length > 0) {
                 stars = 1;
             }
 
             dataStore[currentIndex].stars = Math.max(dataStore[currentIndex].stars, stars);
             document.getElementById('star-result').innerText = "⭐".repeat(stars);
-            
-            const feedbackMsg = stars === 3 ? "Excellent!" : (stars === 2 ? "Good Job!" : "Try again.");
-            synth.speak(new SpeechSynthesisUtterance(feedbackMsg));
+            synth.speak(new SpeechSynthesisUtterance(stars >= 2 ? "Great job!" : "Try again."));
         }
 
-        function backToMenu() {
-            renderMenu();
-        }
-
+        function backToMenu() { renderMenu(); }
         function showReport() {
-            const totalStars = dataStore.reduce((sum, item) => sum + item.stars, 0);
-            const maxStars = dataStore.length * 3;
-            alert(`Amazing! You got ${totalStars} / ${maxStars} stars in total! 🏆`);
+            const total = dataStore.reduce((s, i) => s + i.stars, 0);
+            alert(`Total Stars: ${total} / ${dataStore.length * 3} 🏆`);
         }
     </script>
 </body>
