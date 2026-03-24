@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>P2 English Oral Star Challenge</title>
+    <title>P2 English Star Challenge</title>
     <style>
         :root {
             --primary: #4CAF50;
             --secondary: #2196F3;
             --bg: #F0F9FF;
             --star-color: #FFD700;
+            --record-active: #FF9800;
         }
 
         body {
@@ -24,7 +25,6 @@
             -webkit-user-select: none;
         }
 
-        /* 頂部導航 */
         .header {
             width: 100%;
             background: white;
@@ -46,18 +46,20 @@
 
         .item-card {
             background: white;
-            margin: 10px 0;
-            padding: 20px;
-            border-radius: 15px;
+            margin: 12px 0;
+            padding: 22px;
+            border-radius: 18px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.05);
-            font-size: 24px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            font-size: 26px;
             cursor: pointer;
+            transition: 0.2s;
         }
+        .item-card:active { transform: scale(0.98); background: #f9f9f9; }
 
-        .star-display { color: var(--star-color); font-size: 20px; }
+        .star-display { color: var(--star-color); font-size: 22px; font-weight: bold; }
 
         /* 練習區 */
         #practice-zone {
@@ -70,51 +72,54 @@
         }
 
         .sentence-display {
-            font-size: 50px;
+            font-size: 55px;
             font-weight: bold;
-            margin: 30px 20px;
+            margin: 40px 20px;
             text-align: center;
+            color: #333;
+            line-height: 1.2;
         }
 
         .star-feedback {
-            font-size: 60px;
-            height: 80px;
+            font-size: 80px;
+            height: 100px;
             color: var(--star-color);
+            text-shadow: 2px 2px 5px rgba(0,0,0,0.1);
         }
 
-        .btn-group { display: flex; gap: 30px; margin-top: 20px; }
+        .btn-group { display: flex; gap: 40px; margin-top: 20px; }
 
         .circle-btn {
-            width: 120px; height: 120px; border-radius: 50%; border: none;
-            font-size: 45px; color: white; cursor: pointer;
-            box-shadow: 0 6px 12px rgba(0,0,0,0.2);
+            width: 140px; height: 140px; border-radius: 50%; border: none;
+            font-size: 50px; color: white; cursor: pointer;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.2);
+            display: flex; align-items: center; justify-content: center;
+            transition: 0.3s;
         }
 
         #btn-listen { background-color: var(--secondary); }
         #btn-record { background-color: #F44336; }
         
         .nav-btn {
-            margin-top: 40px; padding: 15px 40px; font-size: 22px;
-            border-radius: 30px; border: none; background: var(--primary);
-            color: white; cursor: pointer;
+            margin-top: 50px; padding: 18px 50px; font-size: 24px;
+            border-radius: 35px; border: none; background: var(--primary);
+            color: white; cursor: pointer; font-weight: bold;
         }
 
-        .hidden { display: none; }
-        
-        /* 載入中 */
-        #loading { font-size: 24px; margin-top: 100px; }
+        .hidden { display: none !important; }
+        #loading { font-size: 24px; margin-top: 100px; color: #666; }
     </style>
 </head>
 <body>
 
     <div class="header">🌟 P2 English Challenge</div>
 
-    <div id="loading">Loading lessons...</div>
+    <div id="loading">🔄 Loading your lessons...</div>
 
     <div id="menu-zone" class="hidden">
-        <p style="text-align:center; color:#666;">Choose a word to practice:</p>
+        <p style="text-align:center; color:#666; font-size: 20px;">Tap a word to start:</p>
         <div id="item-list"></div>
-        <button class="nav-btn" onclick="showReport()" style="width:100%; background:#9C27B0;">View My Stars 🏆</button>
+        <button class="nav-btn" onclick="showReport()" style="width:100%; background:#9C27B0; margin-top:30px;">View My Total Stars 🏆</button>
     </div>
 
     <div id="practice-zone">
@@ -130,11 +135,12 @@
     </div>
 
     <script>
-        // 老師請在此更換您的 Google CSV 網址
+        // ★★★ 老師請注意：請將下面這串網址換成你的 Google CSV 網址 ★★★
         const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRJ13yt6GiMw7ehCCTl2Af9hu2vlRNXbI3MF1KG9jBhUL2YMYRNdlmdL_cJWkTi8YVMeq8X4VaBXJL8/pub?output=csv"; 
         
-        let dataStore = []; // 格式: {text: "apple", stars: 0}
+        let dataStore = []; 
         let currentIndex = -1;
+        let recordingTimer;
 
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         const synth = window.speechSynthesis;
@@ -145,9 +151,8 @@
         };
 
         function fetchData() {
-            if (CSV_URL === "您的CSV網址") {
-                // 預設測試資料
-                setupData(["Reading", "Swimming", "Playing Football", "I like skipping"]);
+            if (CSV_URL === "您的CSV網址" || CSV_URL === "") {
+                setupData(["Reading", "Swimming", "I like skipping", "What do you like?"]);
             } else {
                 fetch(CSV_URL)
                     .then(res => res.text())
@@ -155,7 +160,9 @@
                         const lines = text.split('\n').map(l => l.trim()).filter(l => l !== "");
                         setupData(lines);
                     })
-                    .catch(() => alert("Error loading data."));
+                    .catch(() => {
+                        document.getElementById('loading').innerText = "❌ Connection Error. Please check settings.";
+                    });
             }
         }
 
@@ -173,7 +180,7 @@
                 card.className = 'item-card';
                 card.onclick = () => startPractice(index);
                 
-                let starText = "⭐".repeat(item.stars) || "未練習";
+                let starText = item.stars > 0 ? "⭐".repeat(item.stars) : "New 📝";
                 card.innerHTML = `<span>${item.text}</span><span class="star-display">${starText}</span>`;
                 listDiv.appendChild(card);
             });
@@ -191,21 +198,50 @@
             if (SpeechRecognition && !recognition) {
                 recognition = new SpeechRecognition();
                 recognition.lang = 'en-US';
-                recognition.onresult = (e) => handleResult(e.results[0][0].transcript);
-                recognition.onend = () => document.getElementById('btn-record').style.opacity = "1";
+                recognition.continuous = false;
+                recognition.interimResults = false;
+
+                recognition.onresult = (e) => {
+                    clearTimeout(recordingTimer);
+                    handleResult(e.results[0][0].transcript);
+                };
+
+                recognition.onend = () => {
+                    resetRecordButton();
+                };
             }
         }
 
         function playAudio() {
             const utter = new SpeechSynthesisUtterance(dataStore[currentIndex].text);
             utter.lang = 'en-US';
-            utter.rate = 0.8;
+            utter.rate = 0.75; // 稍微放慢一點點
             synth.speak(utter);
         }
 
         function startRecording() {
-            document.getElementById('btn-record').style.opacity = "0.3";
-            recognition.start();
+            const btn = document.getElementById('btn-record');
+            btn.style.backgroundColor = "var(--record-active)";
+            btn.style.fontSize = "24px";
+            btn.innerText = "Listening";
+
+            try {
+                recognition.start();
+                // 設定 10 秒保護計時器，讓長句子能讀完
+                clearTimeout(recordingTimer);
+                recordingTimer = setTimeout(() => {
+                    recognition.stop();
+                }, 10000); 
+            } catch (e) {
+                recognition.stop();
+            }
+        }
+
+        function resetRecordButton() {
+            const btn = document.getElementById('btn-record');
+            btn.style.backgroundColor = "#F44336";
+            btn.style.fontSize = "50px";
+            btn.innerText = "🎤";
         }
 
         function handleResult(speech) {
@@ -213,18 +249,18 @@
             const heard = speech.toLowerCase().replace(/[.,?!]/g, "");
             
             let stars = 0;
+            // 評分邏輯優化
             if (heard === target) {
-                stars = 3; // 完全正確
+                stars = 3;
             } else if (heard.includes(target) || target.includes(heard)) {
-                stars = 2; // 部分包含
-            } else {
-                stars = 1; // 有聲音但辨識不佳
+                stars = 2;
+            } else if (heard.length > 0) {
+                stars = 1;
             }
 
             dataStore[currentIndex].stars = Math.max(dataStore[currentIndex].stars, stars);
             document.getElementById('star-result').innerText = "⭐".repeat(stars);
             
-            // 語音回饋
             const feedbackMsg = stars === 3 ? "Excellent!" : (stars === 2 ? "Good Job!" : "Try again.");
             synth.speak(new SpeechSynthesisUtterance(feedbackMsg));
         }
@@ -236,7 +272,7 @@
         function showReport() {
             const totalStars = dataStore.reduce((sum, item) => sum + item.stars, 0);
             const maxStars = dataStore.length * 3;
-            alert(`You got ${totalStars} / ${maxStars} stars! Keep it up!`);
+            alert(`Amazing! You got ${totalStars} / ${maxStars} stars in total! 🏆`);
         }
     </script>
 </body>
